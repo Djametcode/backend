@@ -34,6 +34,10 @@ const userSchema = new Schema({
     type: Array,
     default: [],
   },
+  notification: {
+    type: Array,
+    default: [],
+  },
 });
 
 userSchema.pre("save", async function (next) {
