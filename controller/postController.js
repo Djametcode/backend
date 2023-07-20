@@ -83,6 +83,22 @@ const getMyPost = async (req, res) => {
   }
 };
 
+const getPostById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const post = await Post.findOne({ _id: id });
+
+    if (!post) {
+      return res.status(404).json({ msg: "Post not found" });
+    }
+
+    return res.status(200).json({ msg: "Success", post });
+  } catch (error) {
+    console.log(error);
+    return res.status(501).json({ msg: "internal server error" });
+  }
+};
+
 const deletePost = async (req, res) => {
   const { id } = req.params;
   try {
@@ -454,4 +470,5 @@ module.exports = {
   replyComment,
   getCommentById,
   unLikeComment,
+  getPostById,
 };

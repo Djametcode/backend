@@ -13,11 +13,13 @@ const {
   replyComment,
   getCommentById,
   unLikeComment,
+  getPostById,
 } = require("../controller/postController");
 const upload = require("../middleware/multer");
 
 route.post("/create-post", upload, createPost);
 route.get("/get-my-post", getMyPost);
+route.get("/get-post/:id", getPostById);
 route.delete("/delete-post/:id", deletePost);
 route.patch("/update-post/:id", upload, updatePost);
 route.post("/like-post/:id", likePost);
