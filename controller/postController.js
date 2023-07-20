@@ -86,12 +86,21 @@ const getMyPost = async (req, res) => {
 const deletePost = async (req, res) => {
   const { id } = req.params;
   try {
-    const post = await Post.findOneAndDelete({ _id: id });
-    if (!post) {
-      return res.status(404).json({ msg: "Post not found" });
+    const userPost = await User.findOne({ _id: req.user.userId });
+    const post = await Post.findOne({ _id: id });
+
+    const postDeleting = await Post.findOneAndDelete({ _id: id });
+
+    if (!postDeleting) {
+      return res.status(404).json({ msg: "Post not found or already deleted" });
     }
 
-    return res.status(200).json({ msg: "Post deleted" });
+    if (userPost) {
+      const indexPost = post.indexOf(post._id);
+      userPost.post.splice(indexPost, 1);
+      await userPost.save();
+      return res.status(200).json({ msg: "Post deleted", post });
+    }
   } catch (error) {
     console.log(error);
     return res.status(501).json({ msg: "internal server error" });
@@ -100,11 +109,37 @@ const deletePost = async (req, res) => {
 
 const updatePost = async (req, res) => {
   const { id } = req.params;
+  const { text } = req.body;
   try {
+    let file = req.file;
+
+    if (!file) {
+      const post = await Post.findOneAndUpdate(
+        { _id: id },
+        {
+          text: text,
+        },
+        {
+          new: true,
+        }
+      );
+
+      if (!post) {
+        return res.status(404).json({ msg: "Post not found" });
+      }
+      return res.status(200).json({ msg: "Post updated", post });
+    }
+
+    const result = await cloudinary.uploader.upload(file.path, {
+      folder: "Testing",
+      resource_type: "auto",
+    });
+
     const post = await Post.findOneAndUpdate(
       { _id: id },
       {
-        ...req.body,
+        text: text,
+        image: result.secure_url,
       },
       {
         new: true,
@@ -114,7 +149,6 @@ const updatePost = async (req, res) => {
     if (!post) {
       return res.status(404).json({ msg: "Post not found" });
     }
-
     return res.status(200).json({ msg: "Post updated", post });
   } catch (error) {
     console.log(error);
@@ -126,67 +160,62 @@ const likePost = async (req, res) => {
   const { id } = req.params;
   const createdBy = req.user.userId;
   try {
-    const post = await Post.findOne({ _id: id });
-
-    if (!post) {
-      return res.status(404).json({ msg: "Post not found" });
-    }
-
     const check = await Like.exists({ postId: id, createdBy: createdBy });
     console.log(check);
 
     if (check) {
       return res.status(201).json({ msg: "You already like this" });
     }
+
+    const post = await Post.findOne({ _id: id });
+
+    if (!post) {
+      return res.status(404).json({ msg: "Post not found" });
+    }
+
     const newLike = new Like({
       createdBy: createdBy,
       postId: id,
     });
 
     const newLikes = await Like.create(newLike);
-    await post.like.push(newLikes);
+    post.like.push(newLikes);
     await post.save();
 
-    return res.status(200).json({ msg: "Success Like" });
+    return res.status(200).json({ msg: "Success Like", post });
   } catch (error) {
     console.log(error);
     return res.status(501).json({ msg: "internal server error" });
   }
 };
-
 const unLikePost = async (req, res) => {
   const { id } = req.params;
-  const createdBy = req.user.userId;
-
   try {
-    const likeToBeDeleted = await Like.findOne({
+    const likeIndexs = await Like.findOne({
       postId: id,
-      createdBy: createdBy,
+      createdBy: req.user.userId,
     });
-
+    console.log(likeIndexs);
     const data = await Like.findOneAndDelete({
       postId: id,
-      createdBy: createdBy,
+      createdBy: req.user.userId,
     });
 
     if (!data) {
-      return res.status(404).json({ msg: "Already unliked" });
+      return res.status(404).json({ msg: "like not found" });
     }
 
-    const post = await Post.findOne({ _id: id });
+    if (likeIndexs) {
+      const post = await Post.findOne({ _id: id });
 
-    const likeIndex = post.like.indexOf(likeToBeDeleted._id);
+      const likeindex = post.like.indexOf(likeIndexs._id);
+      post.like.splice(likeindex, 1);
+      await post.save();
 
-    if (likeIndex !== -1) {
-      post.like.splice(likeIndex, 1);
+      return res.status(200).json({ msg: "Like deleted", post });
     }
-
-    await post.save();
-
-    return res.status(200).json({ msg: "Like deleted", data, post });
   } catch (error) {
     console.log(error);
-    return res.status(501).json({ msg: "internal server error" });
   }
 };
 
@@ -194,6 +223,8 @@ const commentPost = async (req, res) => {
   const { id } = req.params;
   const createdBy = req.user.userId;
   const { text } = req.body;
+  let file = req.file;
+
   try {
     const post = await Post.findOne({ _id: id });
 
@@ -201,17 +232,37 @@ const commentPost = async (req, res) => {
       return res.status(404).json({ msg: "Post not found or deleted" });
     }
 
+    if (!file) {
+      const comment = new Comment({
+        createdBy: createdBy,
+        text: text,
+        postId: id,
+      });
+
+      const newComment = await Comment.create(comment);
+      post.comment.push(newComment);
+      await post.save();
+
+      return res
+        .status(200)
+        .json({ msg: "Comment success with no image", post });
+    }
+    const result = await cloudinary.uploader.upload(file.path, {
+      folder: "Testing",
+      resource_type: "auto",
+    });
     const comment = new Comment({
       createdBy: createdBy,
       text: text,
       postId: id,
+      image: result.secure_url,
     });
 
     const newComment = await Comment.create(comment);
     post.comment.push(newComment);
     await post.save();
 
-    return res.status(200).json({ msg: "Comment success", post });
+    return res.status(200).json({ msg: "Comment success with image", post });
   } catch (error) {
     console.log(error);
     return res.status(501).json({ msg: "internal server error" });
@@ -246,10 +297,42 @@ const likeComment = async (req, res) => {
   }
 };
 
+const unLikeComment = async (req, res) => {
+  const { id } = req.params;
+  const creator = req.user.userId;
+  try {
+    const like = await Like.findOne({ createdBy: creator, commentId: id });
+    const comment = await Comment.findOne({ _id: id });
+
+    const deletedLike = await Like.findOneAndDelete({
+      createdBy: creator,
+      commentId: id,
+    });
+
+    if (!deletedLike) {
+      return res
+        .status(404)
+        .json({ msg: "Comment not found or already unliked" });
+    }
+
+    if (like) {
+      const indexLike = comment.likes.indexOf(like._id);
+      comment.likes.splice(indexLike, 1);
+      await comment.save();
+
+      return res.status(200).json({ msg: "Success unlike comment", comment });
+    }
+  } catch (error) {
+    console.log(error);
+    return res.status(501).json({ msg: "internal server error" });
+  }
+};
+
 const replyComment = async (req, res) => {
   const { id } = req.params;
   const createdBy = req.user.userId;
   const { text } = req.body;
+  let file = req.file;
 
   try {
     const comment = await Comment.findOne({ _id: id });
@@ -260,17 +343,41 @@ const replyComment = async (req, res) => {
         .json({ msg: "Comment not found or already deleted" });
     }
 
+    if (!file) {
+      const replyCommets = new Comment({
+        createdBy: createdBy,
+        text: text,
+        commentId: id,
+      });
+
+      const newReplyComment = await Comment.create(replyCommets);
+      comment.reply.push(newReplyComment);
+      await comment.save();
+
+      return res
+        .status(200)
+        .json({ msg: "Success reply comment with no image", comment });
+    }
+
+    const result = await cloudinary.uploader.upload(file.path, {
+      folder: "Testing",
+      resource_type: "auto",
+    });
+
     const replyCommets = new Comment({
       createdBy: createdBy,
       text: text,
       commentId: id,
+      image: result.secure_url,
     });
 
     const newReplyComment = await Comment.create(replyCommets);
     comment.reply.push(newReplyComment);
     await comment.save();
 
-    return res.status(200).json({ msg: "Success reply comment", comment });
+    return res
+      .status(200)
+      .json({ msg: "Success reply comment with image", comment });
   } catch (error) {
     console.log(error);
     return res.status(501).json({ msg: "internal server error" });
@@ -282,13 +389,19 @@ const deleteComment = async (req, res) => {
   const createdBy = req.user.userId;
   try {
     const commentToBeDeleted = await Comment.findOne({
-      postId: id,
-      createdBy: createdBy,
+      _id: id,
     });
 
+    // const check = commentToBeDeleted.createdBy !== createdBy;
+
+    // if (check) {
+    //   return res
+    //     .status(400)
+    //     .json({ msg: "You are not allowed to delete this" });
+    // }
+
     const data = await Comment.findOneAndDelete({
-      postId: id,
-      createdBy: createdBy,
+      _id: id,
     });
 
     if (!data) {
@@ -297,16 +410,32 @@ const deleteComment = async (req, res) => {
         .json({ msg: "Comment not found or already deleted" });
     }
 
-    const post = await Post.findOne({ _id: id });
-    const commentIndex = post.comment.indexOf(commentToBeDeleted._id);
-    console.log(commentIndex);
+    if (commentToBeDeleted) {
+      const post = await Post.findOne({ createdBy: createdBy });
 
-    if (commentIndex !== -1) {
+      const commentIndex = post.comment.indexOf(commentToBeDeleted._id);
+      console.log(commentIndex);
       post.comment.splice(commentIndex, 1);
-    }
-    await post.save();
+      await post.save();
 
-    return res.status(200).json({ msg: "Comment deleted", data });
+      return res.status(200).json({ msg: "Comment deleted", post });
+    }
+  } catch (error) {
+    console.log(error);
+    return res.status(501).json({ msg: "internal server error" });
+  }
+};
+
+const getCommentById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const comment = await Comment.findOne({ _id: id });
+
+    if (!comment) {
+      return res.status(404).json({ msg: "Comment not found or deleted" });
+    }
+
+    return res.status(200).json({ msg: "Success", comment });
   } catch (error) {
     console.log(error);
     return res.status(501).json({ msg: "internal server error" });
@@ -323,4 +452,6 @@ module.exports = {
   deleteComment,
   likeComment,
   replyComment,
+  getCommentById,
+  unLikeComment,
 };

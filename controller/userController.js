@@ -4,7 +4,7 @@ const cloudinary = require("../utils/cloudinary");
 
 const updateProfile = async (req, res) => {
   const userId = req.user.userId;
-  const { email, username, avatar } = req.body;
+  const { email, username } = req.body;
   let file = req.file;
 
   try {
@@ -154,12 +154,12 @@ const unFollowUser = async (req, res) => {
   const { id } = req.params;
   const follower = req.user.userId;
   try {
-    const followingToBeDeleted = await Follower.find({
+    const followingToBeDeleted = await Follower.findOne({
       target: id,
       user: follower,
     });
 
-    const currFollowingToBeDeleted = await Follower.find({
+    const currFollowingToBeDeleted = await Follower.findOne({
       target: id,
     });
 
@@ -174,26 +174,27 @@ const unFollowUser = async (req, res) => {
       return res.status(404).json({ msg: "Already unfollow" });
     }
 
-    const user = await User.findOne({ _id, id });
-    const indexFollower = user.follower.indexOf(followingToBeDeleted._id);
+    if (followingToBeDeleted && currFollowingToBeDeleted) {
+      const targetUser = await User.findOne({ _id: id });
+      const currentUser = await User.findOne({ _id: req.user.userId });
 
-    if (indexFollower !== -1) {
-      user.follower.splice(indexFollower, 1);
+      const indexTargetUser = targetUser.follower.indexOf(
+        followingToBeDeleted._id
+      );
+      const indexCurrentUser = currentUser.following.indexOf(
+        currFollowingToBeDeleted._id
+      );
+
+      targetUser.follower.splice(indexTargetUser, 1);
+      currentUser.following.splice(indexTargetUser, 1);
+
+      await targetUser.save();
+      await currentUser.save();
+
+      return res
+        .status(200)
+        .json({ msg: "Success unfollow", currentUser, targetUser });
     }
-
-    const currUserFollowing = await User.findOne({ _id: follower });
-    const indexFollowing = currUserFollowing.following.indexOf(
-      currUserFollowing._id
-    );
-
-    if (indexFollowing !== -1) {
-      currUserFollowing.following.splice(indexFollowing, 1);
-    }
-
-    await user.save();
-    await currUserFollowing.save();
-
-    return res.status(200).json({ msg: "Success unfollow", currUserFollowing });
   } catch (error) {
     console.log(error);
     return res.status(501).json({ msg: "Internal server error" });

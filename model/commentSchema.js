@@ -26,6 +26,10 @@ const commentSchema = new Schema({
     type: mongoose.Types.ObjectId,
     ref: "Comment",
   },
+  image: {
+    type: String,
+    default: "",
+  },
 });
 
 module.exports = mongoose.model("Comment", commentSchema);

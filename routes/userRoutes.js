@@ -14,7 +14,7 @@ const upload = require("../middleware/multer");
 route.patch("/update-profile", upload, updateProfile);
 route.delete("/delete-account", deleteAccount);
 route.get("/get-user/:id", getUserById);
-route.get("get-all-user", getAllUser);
+route.get("/cget-all-user", getAllUser);
 route.get("/get-current-user", getCurrentUser);
 route.post("/follow-user/:id", followUser);
 route.delete("/unfollow-user/:id", unFollowUser);
